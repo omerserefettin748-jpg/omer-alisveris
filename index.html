@@ -135,6 +135,7 @@
         <button class="primary" id="addBtn">+ Ekle</button>
         <button id="quickBtn">Hızlı ekle</button>
         <button class="primary" id="scanBtn">📷 Barkod okut</button>
+        <button id="barcodeManageBtn">🏷️ Barkodlar</button>
         <button class="warn" id="shareBtn" disabled>Paylaş</button>
         <button class="danger" id="clearDoneBtn" disabled>Bitenleri sil</button>
         <button class="danger" id="resetBtn">Listeyi sıfırla</button>
@@ -191,6 +192,26 @@
       </div>
     </div>
   </div>
+
+
+  <!-- Barkod Yönetim Modal -->
+  <div class="modal" id="barcodeModal" aria-hidden="true">
+    <div class="panel">
+      <div class="bar">
+        <div class="title"><img src="icons/icon-192.png" alt="" /> Kayıtlı Barkodlar</div>
+        <button class="danger" id="closeBarcodeBtn">Kapat</button>
+      </div>
+
+      <div style="padding:12px;">
+        <input id="barcodeSearch" placeholder="Barkod veya ürün adına göre ara" style="width:100%; margin-bottom:10px;" />
+        <div id="barcodeList" class="list"></div>
+        <div class="mini" style="margin-top:10px; color:rgba(229,231,235,.7);">
+          İpucu: “Fiyat değiştir” ile fiyatı güncelle, “Unut” ile barkodu tamamen sil.
+        </div>
+      </div>
+    </div>
+  </div>
+
 
   <div class="toast" id="toast"></div>
 
@@ -540,9 +561,116 @@ Toplam (kalan): ${money(totals.totalOpen)}
     $(id).addEventListener("change", render);
   });
 
-  $("closeScanBtn").addEventListener("click", closeScanner);
+  
+  // --- Barkod Yönetimi (Fiyat değiştir / Unut) ---
+  function openBarcodeManager(){
+    $("barcodeModal").style.display = "flex";
+    $("barcodeModal").setAttribute("aria-hidden", "false");
+    $("barcodeSearch").value = "";
+    renderBarcodeManager();
+  }
+
+  function closeBarcodeManager(){
+    $("barcodeModal").style.display = "none";
+    $("barcodeModal").setAttribute("aria-hidden", "true");
+  }
+
+  function renderBarcodeManager(){
+    const q = ($("barcodeSearch").value || "").trim().toLowerCase();
+    const listEl = $("barcodeList");
+    listEl.innerHTML = "";
+
+    const entries = Object.entries(barcodeMap || {})
+      .map(([code, obj]) => ({ code, ...(obj || {}) }))
+      .filter(x => x.code && x.name);
+
+    const filtered = entries.filter(x => {
+      if(!q) return true;
+      return x.code.toLowerCase().includes(q) || (x.name || "").toLowerCase().includes(q);
+    });
+
+    if(filtered.length === 0){
+      const empty = document.createElement("div");
+      empty.className = "item";
+      empty.innerHTML = `<div class="badge">Kayıtlı barkod yok.</div>`;
+      listEl.appendChild(empty);
+      return;
+    }
+
+    filtered.reverse();
+
+    for(const it of filtered){
+      const priceText = (it.price == null || Number.isNaN(Number(it.price)))
+        ? "Fiyat yok"
+        : money(Number(it.price));
+
+      const row = document.createElement("div");
+      row.className = "item";
+      row.innerHTML = `
+        <div class="main">
+          <div class="name">
+            <div class="t">${escapeHtml(it.name)}</div>
+            <div class="s">
+              <span class="chip">Barkod: ${escapeHtml(it.code)}</span>
+              <span class="chip">${escapeHtml(it.cat || "Genel")}</span>
+              <span class="chip">${escapeHtml(priceText)}</span>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button class="warn" data-action="edit" data-code="${escapeHtml(it.code)}">Fiyat değiştir</button>
+          <button class="danger" data-action="forget" data-code="${escapeHtml(it.code)}">Unut</button>
+        </div>
+      `;
+
+      row.querySelectorAll("button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const code = btn.getAttribute("data-code");
+          const action = btn.getAttribute("data-action");
+          if(action === "edit") editBarcodePrice(code);
+          if(action === "forget") forgetBarcode(code);
+        });
+      });
+
+      listEl.appendChild(row);
+    }
+  }
+
+  function editBarcodePrice(code){
+    const entry = barcodeMap[code];
+    if(!entry) return;
+
+    const current = (entry.price == null) ? "" : String(entry.price).replace(".", ",");
+    const next = prompt(`"${entry.name}" için yeni birim fiyat (₺):`, current);
+    if(next === null) return;
+
+    const val = (next.trim() === "") ? null : toNumberPrice(next);
+    barcodeMap[code].price = val;
+    save();
+    renderBarcodeManager();
+    toast("Fiyat güncellendi.");
+  }
+
+  function forgetBarcode(code){
+    const entry = barcodeMap[code];
+    if(!entry) return;
+    if(!confirm(`Bu barkodu unutayım mı?\n${entry.name}\n(${code})`)) return;
+
+    delete barcodeMap[code];
+    save();
+    renderBarcodeManager();
+    toast("Barkod silindi.");
+  }
+
+
+$("closeScanBtn").addEventListener("click", closeScanner);
   $("manualBtn").addEventListener("click", manualBarcode);
   $("flipCamBtn").addEventListener("click", flipCamera);
+
+  $("barcodeManageBtn").addEventListener("click", openBarcodeManager);
+  $("closeBarcodeBtn").addEventListener("click", closeBarcodeManager);
+  $("barcodeSearch").addEventListener("input", renderBarcodeManager);
+
 
   load();
   render();
