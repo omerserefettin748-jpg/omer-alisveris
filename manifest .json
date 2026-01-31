@@ -1,0 +1,13 @@
+{
+  "background_color": "#0a111f",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "Ömer Alışveriş",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Ömer",
+  "start_url": "/",
+  "theme_color": "#16a34a",
+  "id": "omer-alisveris",
+  "lang": "tr"
+}
